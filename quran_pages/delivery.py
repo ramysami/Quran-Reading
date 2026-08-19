@@ -37,8 +37,12 @@ def _wacli_search_dirs() -> List[Path]:
     """Common install dirs, for schedulers that hand us a bare-bones PATH."""
     home = Path.home()
     if platform.system() == "Windows":
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
         candidates = [
-            Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "Programs" / "wacli",
+            local_app_data / "Microsoft" / "WinGet" / "Links",  # winget
+            home / "scoop" / "shims",  # scoop
+            Path(os.environ.get("ChocolateyInstall", r"C:\ProgramData\chocolatey")) / "bin",
+            local_app_data / "Programs" / "wacli",
             Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "wacli",
             home / "go" / "bin",
             home / "bin",
@@ -100,6 +104,8 @@ def send_via_wacli(image: Path, number: str, caption: str, configured: str = "")
         [executable, "send", "file", "--to", number, "--file", str(image), "--caption", caption],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=_WACLI_TIMEOUT_SECONDS,
         creationflags=NO_WINDOW,
     )

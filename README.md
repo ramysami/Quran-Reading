@@ -32,7 +32,9 @@ Python 3.9+ **with Tkinter**.
 - **macOS**: `/usr/bin/python3` (Command Line Tools) works out of the box.
   For Homebrew Python, add Tk with `brew install python-tk`.
 - **Windows**: the [python.org](https://www.python.org/downloads/) installer
-  includes Tkinter.
+  includes Tkinter — keep **tcl/tk and IDLE** ticked. Ticking *Add Python to
+  PATH* is optional: the launcher falls back to the `py` launcher, which the
+  installer always places in `C:\Windows`.
 
 For WhatsApp delivery, install [wacli](https://github.com/openclaw/wacli) and
 pair it once with `wacli auth`; the app uses that saved session. The absolute
@@ -54,7 +56,12 @@ Configure the settings, then press **Save & schedule daily task**. Use
 python3 run.py --deliver        # deliver today's batch (what the scheduler runs)
 python3 run.py --download-all   # fetch the whole 604-page library
 python3 run.py --unschedule     # remove the daily task from the OS scheduler
+python3 run.py --doctor         # print diagnostics (OS, Python, wacli, task, recent log)
 ```
+
+`--doctor` is the fastest way to explain a delivery that did not arrive — it
+reports the resolved wacli path, whether the task is registered, and the last
+few log lines in one block (the WhatsApp number is masked).
 
 ## Data locations
 
@@ -104,3 +111,24 @@ run retries the same page.
 ```bash
 launchctl print gui/$(id -u)/com.quranpages.daily | grep -E "state|runs|last exit"
 ```
+
+**Windows: the task exists but never runs.**
+Two Task Scheduler defaults break a daily job, and neither reports an error —
+the run simply never happens:
+
+- *Start the task only if the computer is on AC power* is **on** by default, so
+  a laptop on battery at delivery time skips the run.
+- *Run task as soon as possible after a scheduled start is missed* is **off** by
+  default, so a PC that is asleep or shut down at the scheduled minute skips
+  that day entirely, with no catch-up.
+
+The app registers its task from an XML definition that turns the first off and
+the second on, matching how launchd behaves on macOS. If a locked-down system
+rejects the XML, it falls back to a plain task (which is subject to both
+defaults again) rather than failing outright.
+
+**Windows: double-clicking the launcher does nothing.**
+Run `Quran Pages.bat` from a terminal to see the message it prints. The launcher
+checks for Python and Tkinter before starting the windowless process, because
+`pythonw.exe` has no console and would otherwise swallow the error, leaving no
+sign that anything happened.
