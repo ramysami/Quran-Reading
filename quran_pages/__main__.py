@@ -27,7 +27,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--unschedule", action="store_true",
         help="remove the daily task from the OS scheduler and exit",
     )
+    parser.add_argument(
+        "--doctor", action="store_true",
+        help="print diagnostics (OS, Python, wacli, task status, recent log) and exit",
+    )
     args = parser.parse_args(argv)
+
+    if args.doctor:
+        from . import doctor
+
+        return doctor.main()
 
     if args.unschedule:
         from . import scheduler

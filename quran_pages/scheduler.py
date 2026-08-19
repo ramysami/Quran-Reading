@@ -6,12 +6,14 @@ Both run: <python> <project>/run.py --deliver
 
 from __future__ import annotations
 
+import datetime
 import os
 import platform
 import plistlib
 import subprocess
 import sys
 from pathlib import Path
+from xml.sax.saxutils import escape
 from typing import Sequence, Tuple
 
 from .config import Config, app_home
@@ -56,17 +58,103 @@ def _parse_time(delivery_time: str) -> Tuple[int, int]:
 NO_WINDOW = 0x08000000 if platform.system() == "Windows" else 0  # CREATE_NO_WINDOW
 
 
-def _schedule_windows(hour: int, minute: int) -> None:
-    command = f'"{_python_for_scheduling()}" "{LAUNCHER}" --deliver'
-    result = subprocess.run(
-        ["schtasks", "/Create", "/F", "/SC", "DAILY", "/TN", TASK_NAME,
-         "/ST", f"{hour:02d}:{minute:02d}", "/TR", command],
+def _windows_task_xml(hour: int, minute: int) -> str:
+    """Task Scheduler definition for the daily delivery.
+
+    schtasks' plain /TR form inherits defaults that quietly break a daily job on
+    a laptop: DisallowStartIfOnBatteries is true (unplugged at delivery time =
+    the task never starts) and StartWhenAvailable is false (PC asleep or off at
+    the scheduled minute = that day is skipped outright, with no catch-up).
+    macOS launchd does neither, which is why the same settings behaved
+    differently across the two platforms. Registering from XML lets us turn both
+    off and match the mac behaviour.
+    """
+    start = f"{datetime.date.today().isoformat()}T{hour:02d}:{minute:02d}:00"
+    command = escape(_python_for_scheduling())
+    arguments = escape(f'"{LAUNCHER}" --deliver')
+    working_dir = escape(str(LAUNCHER.parent))
+    return f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Delivers the day's Quran pages.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>{start}</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{command}</Command>
+      <Arguments>{arguments}</Arguments>
+      <WorkingDirectory>{working_dir}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+
+def _schtasks(args: list) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["schtasks"] + args,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         creationflags=NO_WINDOW,
     )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip())
+
+
+def _schedule_windows(hour: int, minute: int) -> None:
+    # Task Scheduler reads /XML files as UTF-16.
+    xml_file = app_home() / "task.xml"
+    app_home().mkdir(parents=True, exist_ok=True)
+    xml_file.write_text(_windows_task_xml(hour, minute), encoding="utf-16")
+
+    result = _schtasks(["/Create", "/F", "/TN", TASK_NAME, "/XML", str(xml_file)])
+    if result.returncode == 0:
+        return
+
+    # Older or locked-down systems can reject /XML; fall back to the simple form
+    # so scheduling still works, minus the battery/catch-up settings.
+    xml_error = (result.stderr or result.stdout).strip()
+    command = f'"{_python_for_scheduling()}" "{LAUNCHER}" --deliver'
+    fallback = _schtasks(
+        ["/Create", "/F", "/SC", "DAILY", "/TN", TASK_NAME,
+         "/ST", f"{hour:02d}:{minute:02d}", "/TR", command]
+    )
+    if fallback.returncode != 0:
+        raise RuntimeError(
+            f"{(fallback.stderr or fallback.stdout).strip()} (XML attempt: {xml_error})"
+        )
 
 
 def _launchd_plist_path() -> Path:
@@ -156,11 +244,7 @@ def schedule_daily(delivery_time: str) -> str:
 def unschedule() -> None:
     system = current_os()
     if system == "windows":
-        subprocess.run(
-            ["schtasks", "/Delete", "/F", "/TN", TASK_NAME],
-            capture_output=True,
-            creationflags=NO_WINDOW,
-        )
+        _schtasks(["/Delete", "/F", "/TN", TASK_NAME])
     elif system == "macos":
         subprocess.run(
             ["launchctl", "bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}"], capture_output=True
