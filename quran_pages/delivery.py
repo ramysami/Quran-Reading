@@ -33,8 +33,51 @@ def desktop_dir() -> Path:
     return Path.home() / "Desktop"
 
 
-def wacli_path() -> Optional[str]:
-    return shutil.which("wacli")
+def _wacli_search_dirs() -> List[Path]:
+    """Common install dirs, for schedulers that hand us a bare-bones PATH."""
+    home = Path.home()
+    if platform.system() == "Windows":
+        candidates = [
+            Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "Programs" / "wacli",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "wacli",
+            home / "go" / "bin",
+            home / "bin",
+        ]
+    else:
+        candidates = [
+            Path("/opt/homebrew/bin"),  # Apple silicon Homebrew — not on launchd's PATH
+            Path("/usr/local/bin"),
+            Path("/opt/local/bin"),
+            home / ".local" / "bin",
+            home / "go" / "bin",
+            home / "bin",
+        ]
+    return candidates
+
+
+def wacli_path(configured: str = "") -> Optional[str]:
+    """Locate the wacli executable.
+
+    Scheduled runs (launchd, Task Scheduler) inherit a minimal PATH that omits
+    Homebrew and other user install dirs, so a plain which() lookup fails there
+    even though the app finds wacli fine when launched from a shell. Prefer the
+    absolute path saved when the GUI detected it, then PATH, then known dirs.
+    """
+    name = "wacli.exe" if platform.system() == "Windows" else "wacli"
+    if configured:
+        resolved = shutil.which(configured) or (
+            configured if os.access(configured, os.X_OK) else None
+        )
+        if resolved:
+            return resolved
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in _wacli_search_dirs():
+        candidate = directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def open_image(path: Path) -> None:
@@ -48,10 +91,11 @@ def open_image(path: Path) -> None:
         subprocess.run(["xdg-open", str(path)], check=True)
 
 
-def send_via_wacli(image: Path, number: str, caption: str) -> None:
-    executable = wacli_path()
+def send_via_wacli(image: Path, number: str, caption: str, configured: str = "") -> None:
+    executable = wacli_path(configured)
     if executable is None:
-        raise RuntimeError("wacli is not installed or not on PATH")
+        searched = ", ".join(str(d) for d in _wacli_search_dirs())
+        raise RuntimeError(f"wacli executable not found (searched PATH and {searched})")
     result = subprocess.run(
         [executable, "send", "file", "--to", number, "--file", str(image), "--caption", caption],
         capture_output=True,
@@ -102,7 +146,7 @@ def deliver_today(config: Optional[Config] = None, force: bool = False) -> List[
                 destinations.append("Desktop")
             if config.send_via_wacli and config.wacli_number:
                 caption = f"Quran — page {page} of {PAGE_COUNT}"
-                send_via_wacli(image, config.wacli_number, caption)
+                send_via_wacli(image, config.wacli_number, caption, config.wacli_path)
                 destinations.append(f"WhatsApp {config.wacli_number}")
             if config.open_after_delivery:
                 open_image(display_copy)

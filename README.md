@@ -35,7 +35,10 @@ Python 3.9+ **with Tkinter**.
   includes Tkinter.
 
 For WhatsApp delivery, install [wacli](https://github.com/openclaw/wacli) and
-pair it once with `wacli auth`; the app uses that saved session.
+pair it once with `wacli auth`; the app uses that saved session. The absolute
+path to `wacli` is saved in the settings when the app detects it, because
+scheduled jobs run with a minimal `PATH` that excludes Homebrew — see
+Troubleshooting.
 
 ## Run
 
@@ -73,4 +76,31 @@ quran_pages/
   delivery.py             Desktop copy + wacli send + progress/log
   scheduler.py            OS detection, schtasks / launchd registration
   gui.py                  Tkinter interface (light theme)
+```
+
+## Troubleshooting
+
+**"Deliver now" works, but the scheduled delivery doesn't.**
+Almost always a `PATH` problem: launchd (macOS) and Task Scheduler (Windows)
+start jobs with a minimal environment that omits `/opt/homebrew/bin` and other
+user install dirs, so a helper like `wacli` that works in your shell is
+invisible to the daily job. The app handles this by saving wacli's absolute
+path in the settings, searching the common install dirs, and writing a usable
+`PATH` into the scheduled job. If you move or reinstall wacli, open the app and
+press **Save & schedule daily task** again to refresh both.
+
+**Check what the daily job actually did:**
+
+```bash
+tail -20 ~/Library/Application\ Support/QuranPages/delivery.log
+```
+
+Every run appends either `delivered → …` or `FAILED — <reason>`. A failed page
+is not skipped: progress only advances after a successful delivery, so the next
+run retries the same page.
+
+**Check the job is registered (macOS):**
+
+```bash
+launchctl print gui/$(id -u)/com.quranpages.daily | grep -E "state|runs|last exit"
 ```

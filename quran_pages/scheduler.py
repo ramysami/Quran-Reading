@@ -12,9 +12,9 @@ import plistlib
 import subprocess
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Sequence, Tuple
 
-from .config import app_home
+from .config import Config, app_home
 
 TASK_NAME = "QuranPagesDaily"
 LAUNCHD_LABEL = "com.quranpages.daily"
@@ -73,6 +73,44 @@ def _launchd_plist_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
 
 
+_STANDARD_PATH_DIRS = (
+    "/opt/homebrew/bin",  # Apple silicon Homebrew (wacli lives here)
+    "/opt/homebrew/sbin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "~/.local/bin",
+    "~/go/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+)
+
+
+def _job_path(extra: Sequence[str] = ()) -> str:
+    """PATH for the scheduled job.
+
+    launchd starts jobs with a bare /usr/bin:/bin:/usr/sbin:/sbin, which omits
+    Homebrew and other user install dirs — so helpers like wacli are invisible
+    at delivery time. Build from a fixed, well-known set rather than inheriting
+    the launching process's PATH, which can hold transient entries that would
+    go stale in a job meant to run for years.
+    """
+    entries = list(extra) + [str(Path(d).expanduser()) for d in _STANDARD_PATH_DIRS]
+    seen, result = set(), []
+    for entry in entries:
+        if entry and entry not in seen:
+            seen.add(entry)
+            result.append(entry)
+    return os.pathsep.join(result)
+
+
+def _helper_dirs() -> list:
+    """Directory of the saved wacli binary, so an unusual install still works."""
+    wacli = Config.load().wacli_path
+    return [str(Path(wacli).parent)] if wacli else []
+
+
 def _schedule_macos(hour: int, minute: int) -> None:
     log_path = str(app_home() / "launchd.log")
     plist = {
@@ -80,6 +118,7 @@ def _schedule_macos(hour: int, minute: int) -> None:
         "ProgramArguments": [_python_for_scheduling(), str(LAUNCHER), "--deliver"],
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
         "RunAtLoad": False,
+        "EnvironmentVariables": {"PATH": _job_path(_helper_dirs()), "HOME": str(Path.home())},
         "StandardOutPath": log_path,
         "StandardErrorPath": log_path,
     }
