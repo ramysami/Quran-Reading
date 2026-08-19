@@ -313,6 +313,8 @@ class App(tk.Tk):
         self.settings.open_after_delivery = self.open_var.get()
         self.settings.send_via_wacli = self.wacli_var.get()
         self.settings.wacli_number = number
+        if self.wacli:  # remember the absolute path for scheduled runs
+            self.settings.wacli_path = self.wacli
         self.settings.save()
         self._refresh_last_sent()
         return True

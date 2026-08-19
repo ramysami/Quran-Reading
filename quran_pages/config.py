@@ -51,6 +51,7 @@ class Config:
     open_after_delivery: bool = False  # open each page in the default image viewer
     send_via_wacli: bool = False
     wacli_number: str = ""  # E.164, e.g. +201234567890
+    wacli_path: str = ""  # absolute path, so scheduled runs find it off-PATH
 
     @classmethod
     def load(cls) -> "Config":
