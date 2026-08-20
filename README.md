@@ -134,26 +134,28 @@ checks for Python and Tkinter before starting the windowless process, because
 sign that anything happened.
 
 **Downloads fail with `CERTIFICATE_VERIFY_FAILED`.**
-The site's certificate is fine — the machine's trust store is incomplete, and
-Python is stricter about it than a browser:
+The site's certificate is fine — the machine's certificate trust is incomplete,
+and Python is stricter about it than a browser:
 
-- **Windows** downloads root certificates on demand. Python only trusts roots
-  already cached in the store and never triggers that download, so a fresh PC
-  can fail on a site Edge opens without complaint.
+- **Windows** fetches root certificates from Windows Update on demand. Python
+  trusts only roots already cached in the store and never triggers that fetch,
+  so a fresh PC can fail on a page Edge opens without complaint.
 - **macOS python.org builds** ship with no trust store until their
   *Install Certificates.command* has been run.
 
-The app prefers an explicit CA bundle when it can find one, checking
-`SSL_CERT_FILE`, then `ca_bundle` in `config.json`, then `certifi` if it is
-installed, before falling back to the system store. `--doctor` reports which is
-in use and whether a real download succeeds.
+**The app recovers from this by itself — there is nothing to install.** When a
+download fails to verify, it hands the transfer to the operating system's own
+HTTPS client (`curl.exe` from `System32` on Windows 10+, `/usr/bin/curl` on
+macOS, PowerShell on older Windows), which validates against the system trust
+chain that Windows keeps up to date. It remembers the switch, so the remaining
+pages skip the attempt that is known to fail.
 
-The simplest fix is usually:
+Certificate verification is never disabled. `--doctor` reports which trust store
+and which downloader are in use, and whether a real download succeeds.
 
-```bash
-pip install certifi
-```
-
-Behind a company proxy that inspects TLS, export the proxy's root certificate
-and point `ca_bundle` (or `SSL_CERT_FILE`) at it — that is the correct fix, and
-the app never disables certificate verification.
+If you would rather fix the trust store itself, any of these work: open
+<https://www.mp3quran.net> once in Edge to populate the missing root; run
+*Install Certificates.command* on macOS; or, behind a company proxy that
+inspects TLS, export its root certificate and point `ca_bundle` in
+`config.json` (or `SSL_CERT_FILE`) at it. If `certifi` happens to be installed
+it is used automatically, but it is not required.

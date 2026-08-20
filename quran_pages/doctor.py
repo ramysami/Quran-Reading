@@ -90,6 +90,7 @@ def report() -> str:
         f"Settings file    : {config_file()} ({'exists' if config_file().exists() else 'MISSING'})",
         f"Page library     : {downloader.cached_count()} of {PAGE_COUNT} downloaded",
         f"Trust store      : {downloader.trust_description()}",
+        f"Downloader       : {downloader.download_client_description()}",
         f"Image download   : {_download_status()}",
         "",
         f"Delivery time    : {config.delivery_time} ({config.pages_per_day} page/day)",
