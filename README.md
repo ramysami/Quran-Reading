@@ -132,3 +132,28 @@ Run `Quran Pages.bat` from a terminal to see the message it prints. The launcher
 checks for Python and Tkinter before starting the windowless process, because
 `pythonw.exe` has no console and would otherwise swallow the error, leaving no
 sign that anything happened.
+
+**Downloads fail with `CERTIFICATE_VERIFY_FAILED`.**
+The site's certificate is fine — the machine's trust store is incomplete, and
+Python is stricter about it than a browser:
+
+- **Windows** downloads root certificates on demand. Python only trusts roots
+  already cached in the store and never triggers that download, so a fresh PC
+  can fail on a site Edge opens without complaint.
+- **macOS python.org builds** ship with no trust store until their
+  *Install Certificates.command* has been run.
+
+The app prefers an explicit CA bundle when it can find one, checking
+`SSL_CERT_FILE`, then `ca_bundle` in `config.json`, then `certifi` if it is
+installed, before falling back to the system store. `--doctor` reports which is
+in use and whether a real download succeeds.
+
+The simplest fix is usually:
+
+```bash
+pip install certifi
+```
+
+Behind a company proxy that inspects TLS, export the proxy's root certificate
+and point `ca_bundle` (or `SSL_CERT_FILE`) at it — that is the correct fix, and
+the app never disables certificate verification.

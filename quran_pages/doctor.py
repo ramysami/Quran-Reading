@@ -10,6 +10,7 @@ import os
 import platform
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 from . import delivery, downloader, scheduler
@@ -27,6 +28,22 @@ def _tkinter_status() -> str:
         return f"OK (Tk {tkinter.TkVersion})"
     except Exception as error:  # missing _tkinter is the usual cause
         return f"MISSING — {error}"
+
+
+def _download_status() -> str:
+    """Actually fetch from the image host — a broken trust store shows up here."""
+    request = urllib.request.Request(
+        downloader.PAGE_URL.format(page=1),
+        method="HEAD",
+        headers={"User-Agent": "QuranPages/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=15, context=downloader.ssl_context()
+        ) as response:
+            return f"OK (HTTP {response.status})"
+    except Exception as error:
+        return f"FAILED — {error}"
 
 
 def _task_status() -> str:
@@ -72,6 +89,8 @@ def report() -> str:
         f"Tkinter          : {_tkinter_status()}",
         f"Settings file    : {config_file()} ({'exists' if config_file().exists() else 'MISSING'})",
         f"Page library     : {downloader.cached_count()} of {PAGE_COUNT} downloaded",
+        f"Trust store      : {downloader.trust_description()}",
+        f"Image download   : {_download_status()}",
         "",
         f"Delivery time    : {config.delivery_time} ({config.pages_per_day} page/day)",
         f"Next page        : {config.next_page}"
