@@ -84,13 +84,34 @@ def wacli_path(configured: str = "") -> Optional[str]:
     return None
 
 
+# DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+_DETACHED = 0x00000008 | 0x00000200 if platform.system() == "Windows" else 0
+
+
 def open_image(path: Path) -> None:
-    """Open an image in the platform's default viewer."""
+    """Open an image in the platform's default viewer, staying unattached to it.
+
+    On Windows the viewer is started through explorer.exe, detached and with no
+    inherited handles, and with a working directory of the page folder. A
+    packaged single-file build deletes its extraction directory as it exits;
+    anything it leaves attached to a process that outlives it can make that
+    deletion fail, which the windowed bootloader reports as a warning dialog.
+    Handing the file to the shell this way means the viewer is the shell's
+    child, not ours, and nothing of ours is still held when we exit.
+    """
     system = platform.system()
     if system == "Darwin":
         subprocess.run(["open", str(path)], check=True)
     elif system == "Windows":
-        os.startfile(str(path))  # noqa — Windows-only API
+        try:
+            subprocess.Popen(
+                ["explorer.exe", str(path)],
+                close_fds=True,
+                cwd=str(path.parent),
+                creationflags=_DETACHED,
+            )
+        except OSError:  # no explorer (rare): opening the page still matters more
+            os.startfile(str(path))  # noqa — Windows-only API
     else:
         subprocess.run(["xdg-open", str(path)], check=True)
 
