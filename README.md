@@ -186,6 +186,18 @@ checks for Python and Tkinter before starting the windowless process, because
 `pythonw.exe` has no console and would otherwise swallow the error, leaving no
 sign that anything happened.
 
+**"Failed to remove temporary directory: ..._MEI......" on Windows.**
+That warning comes from PyInstaller's bootloader, not from the app: a
+single-file build unpacks itself into a temporary folder and removes it on
+exit, and the dialog means the removal failed. It appears *after* the delivery
+has already happened, so the page was still delivered.
+
+Something was still holding the folder — most often a virus scanner reading
+the freshly unpacked files, or a program the app had just launched. The app
+now hands images to the shell as a fully detached process, so nothing it
+started outlives it holding that folder, and it pauses briefly before exiting.
+Leftover `_MEI` folders in `%TEMP%` are harmless and can be deleted.
+
 **Downloads fail with `CERTIFICATE_VERIFY_FAILED`.**
 The site's certificate is fine — the machine's certificate trust is incomplete,
 and Python is stricter about it than a browser:

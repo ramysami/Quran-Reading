@@ -6,7 +6,10 @@ import argparse
 import os
 import platform
 import sys
+import time
 from typing import Optional, Sequence
+
+from .config import frozen
 
 
 def _ensure_output() -> None:
@@ -34,6 +37,19 @@ def _ensure_output() -> None:
     sink = open(os.devnull, "w")
     sys.stdout = sys.stdout or sink
     sys.stderr = sys.stderr or sink
+
+
+def _settle() -> None:
+    """Pause before a packaged build removes its extraction directory.
+
+    A single-file build tears that directory down the moment it exits. Doing so
+    immediately after handing a file to the shell — or while a virus scanner is
+    still reading the freshly extracted files — is what makes the removal fail,
+    and the windowed bootloader reports that failure as a dialog box the user
+    has to dismiss. A couple of seconds in a background task costs nothing.
+    """
+    if frozen() and platform.system() == "Windows":
+        time.sleep(2)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -77,6 +93,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # scheduled run has no console for anything printed here to reach.
         pages = delivery.deliver_today(scheduled=True)
         print(f"delivered pages: {pages}" if pages else "nothing delivered — see delivery.log")
+        _settle()
         return 0
 
     if args.download_all:
