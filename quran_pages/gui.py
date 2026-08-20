@@ -9,7 +9,7 @@ import tkinter.font as tkfont
 from tkinter import messagebox, ttk
 
 from . import delivery, downloader, scheduler
-from .config import PAGE_COUNT, Config
+from .config import PAGE_COUNT, Config, resource_path
 
 BG = "#F7F6F1"
 CARD = "#FFFFFF"
@@ -27,6 +27,7 @@ class App(tk.Tk):
         self.configure(bg=BG, padx=20, pady=16)
         self.resizable(False, False)
 
+        self._set_window_icon()
         self.settings = Config.load()
         self.wacli = delivery.wacli_path()
         self._events: "queue.Queue[tuple[str, object]]" = queue.Queue()
@@ -48,6 +49,14 @@ class App(tk.Tk):
         self.lift()
         self.attributes("-topmost", True)
         self.after(500, lambda: self.attributes("-topmost", False))
+
+    def _set_window_icon(self) -> None:
+        icon = resource_path("assets/icon.ico")
+        try:  # .ico is Windows-only; other platforms keep the default
+            if icon.is_file():
+                self.iconbitmap(default=str(icon))
+        except tk.TclError:
+            pass
 
     # ------------------------------------------------------------------ style
 
