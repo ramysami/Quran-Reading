@@ -52,6 +52,7 @@ class Config:
     send_via_wacli: bool = False
     wacli_number: str = ""  # E.164, e.g. +201234567890
     wacli_path: str = ""  # absolute path, so scheduled runs find it off-PATH
+    ca_bundle: str = ""  # optional CA bundle, for machines with a broken trust store
 
     @classmethod
     def load(cls) -> "Config":
