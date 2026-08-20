@@ -5,11 +5,24 @@ from __future__ import annotations
 import json
 import os
 import platform
+import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 APP_NAME = "QuranPages"
 PAGE_COUNT = 604
+
+
+def resource_path(relative: str) -> Path:
+    """A bundled data file, from the PyInstaller bundle or the source tree."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    root = Path(bundle) if bundle else Path(__file__).resolve().parent.parent
+    return root / relative
+
+
+def frozen() -> bool:
+    """True when running from a packaged single-file executable."""
+    return bool(getattr(sys, "frozen", False))
 
 
 def app_home() -> Path:

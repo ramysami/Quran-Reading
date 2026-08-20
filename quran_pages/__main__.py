@@ -4,15 +4,40 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import sys
 from typing import Optional, Sequence
 
 
+def _ensure_output() -> None:
+    """Give the CLI somewhere to print when there is no console of our own.
+
+    The packaged build is windowless — that is what stops a console flashing on
+    every scheduled run — which leaves sys.stdout as None. Attaching to the
+    terminal that launched us keeps --doctor and friends usable, and anything
+    started by the scheduler falls through to a null sink instead of crashing
+    on the first print().
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+
+            if ctypes.windll.kernel32.AttachConsole(-1):  # ATTACH_PARENT_PROCESS
+                console = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+                sys.stdout = sys.stdout or console
+                sys.stderr = sys.stderr or console
+                return
+        except Exception:
+            pass
+    sink = open(os.devnull, "w")
+    sys.stdout = sys.stdout or sink
+    sys.stderr = sys.stderr or sink
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    if sys.stdout is None or sys.stderr is None:  # pythonw.exe: no console to print to
-        devnull = open(os.devnull, "w")
-        sys.stdout = sys.stdout or devnull
-        sys.stderr = sys.stderr or devnull
+    _ensure_output()
 
     parser = argparse.ArgumentParser(prog="quran-pages", description="Daily Quran page delivery.")
     parser.add_argument(

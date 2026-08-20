@@ -1,0 +1,81 @@
+name: Windows binary
+
+# Tag a release (e.g. `git tag v1.0.0 && git push origin v1.0.0`) to build and
+# publish the portable .exe. Run manually to build without releasing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest # x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build single-file executable
+        run: >
+          pyinstaller
+          --onefile
+          --noconsole
+          --name QuranPages
+          --icon assets/icon.ico
+          --add-data "assets/icon.ico;assets"
+          --clean --noconfirm
+          run.py
+
+      # Proves the bundle actually runs: --doctor exercises tkinter, the SSL
+      # stack and a real download, and writes its report to a file (the build
+      # is windowless, so stdout cannot be relied on here).
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $report = "$env:APPDATA\QuranPages\doctor.txt"
+          Remove-Item $report -ErrorAction SilentlyContinue
+          $run = Start-Process -FilePath dist\QuranPages.exe -ArgumentList '--doctor' -Wait -PassThru
+          if ($run.ExitCode -ne 0) { throw "exited with $($run.ExitCode)" }
+          if (-not (Test-Path $report)) { throw "no diagnostics written - the executable did not run" }
+          Get-Content $report
+          foreach ($check in @('Tkinter          : OK', 'Image download   : OK')) {
+            if (-not (Select-String -Path $report -SimpleMatch -Pattern $check -Quiet)) {
+              throw "smoke test failed: '$check' missing from diagnostics"
+            }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuranPages-windows-x64
+          path: dist/QuranPages.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/QuranPages.exe
+          generate_release_notes: true
+          body: |
+            **Portable Windows app — no installation, no Python, nothing to set up.**
+
+            Download `QuranPages.exe`, put it anywhere you like, and double-click it.
+            Everything it needs is inside the single file.
+
+            - Built for **x64** (runs on ARM64 Windows 11 through emulation)
+            - Windowless: the daily delivery no longer flashes a console window
+            - Settings and the page library live in `%APPDATA%\QuranPages`
+
+            After moving the .exe to its final location, open it once and press
+            **Save & schedule daily task** so the daily job points at the new path.
+
+            Windows SmartScreen may warn about an unsigned app the first time:
+            choose *More info* then *Run anyway*.

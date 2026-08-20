@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from . import delivery, downloader, scheduler
-from .config import PAGE_COUNT, Config, app_home, config_file, log_file
+from .config import PAGE_COUNT, Config, app_home, config_file, frozen, log_file
 
 
 def _mask(number: str) -> str:
@@ -87,6 +87,7 @@ def report() -> str:
         f"OS               : {platform.system()} {platform.release()} ({platform.machine()})",
         f"Python           : {sys.version.split()[0]} — {sys.executable}",
         f"Tkinter          : {_tkinter_status()}",
+        f"Packaging        : {'single-file build' if frozen() else 'source checkout'}",
         f"Settings file    : {config_file()} ({'exists' if config_file().exists() else 'MISSING'})",
         f"Page library     : {downloader.cached_count()} of {PAGE_COUNT} downloaded",
         f"Trust store      : {downloader.trust_description()}",
@@ -115,6 +116,7 @@ def report() -> str:
         f"PATH             : {os.environ.get('PATH', '')}",
         "",
         f"Scheduled task   : {_task_status()}",
+        f"Task runs        : {' '.join(scheduler.delivery_command())}",
         "",
         f"Log file         : {log_file()}",
     ]
@@ -135,5 +137,13 @@ def report() -> str:
 
 
 def main() -> int:
-    print(report())
+    text = report()
+    print(text)
+    try:  # a windowless build may have no console to print to
+        destination = app_home() / "doctor.txt"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text, encoding="utf-8")
+        print(f"\n(saved to {destination})")
+    except OSError:
+        pass
     return 0

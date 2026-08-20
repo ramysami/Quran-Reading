@@ -14,9 +14,9 @@ import subprocess
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
-from typing import Sequence, Tuple
+from typing import List, Sequence, Tuple
 
-from .config import Config, app_home
+from .config import Config, app_home, frozen
 
 TASK_NAME = "QuranPagesDaily"
 LAUNCHD_LABEL = "com.quranpages.daily"
@@ -42,6 +42,26 @@ def _python_for_scheduling() -> str:
         if windowless.exists():
             return str(windowless)
     return str(executable)
+
+
+def _quote(value: str) -> str:
+    return f'"{value}"' if " " in value else value
+
+
+def delivery_command() -> List[str]:
+    """Argv the scheduler should run.
+
+    A packaged build has no run.py to point at — and no interpreter beside it —
+    so the executable schedules itself. Built windowless, it also means the
+    daily run no longer flashes a console window.
+    """
+    if frozen():
+        return [str(Path(sys.executable).resolve()), "--deliver"]
+    return [_python_for_scheduling(), str(LAUNCHER), "--deliver"]
+
+
+def _working_directory() -> str:
+    return str(Path(sys.executable).resolve().parent if frozen() else LAUNCHER.parent)
 
 
 def _parse_time(delivery_time: str) -> Tuple[int, int]:
@@ -70,9 +90,10 @@ def _windows_task_xml(hour: int, minute: int) -> str:
     off and match the mac behaviour.
     """
     start = f"{datetime.date.today().isoformat()}T{hour:02d}:{minute:02d}:00"
-    command = escape(_python_for_scheduling())
-    arguments = escape(f'"{LAUNCHER}" --deliver')
-    working_dir = escape(str(LAUNCHER.parent))
+    argv = delivery_command()
+    command = escape(argv[0])
+    arguments = escape(" ".join(_quote(part) for part in argv[1:]))
+    working_dir = escape(_working_directory())
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -146,7 +167,7 @@ def _schedule_windows(hour: int, minute: int) -> None:
     # Older or locked-down systems can reject /XML; fall back to the simple form
     # so scheduling still works, minus the battery/catch-up settings.
     xml_error = (result.stderr or result.stdout).strip()
-    command = f'"{_python_for_scheduling()}" "{LAUNCHER}" --deliver'
+    command = " ".join(_quote(part) for part in delivery_command())
     fallback = _schtasks(
         ["/Create", "/F", "/SC", "DAILY", "/TN", TASK_NAME,
          "/ST", f"{hour:02d}:{minute:02d}", "/TR", command]
@@ -203,7 +224,7 @@ def _schedule_macos(hour: int, minute: int) -> None:
     log_path = str(app_home() / "launchd.log")
     plist = {
         "Label": LAUNCHD_LABEL,
-        "ProgramArguments": [_python_for_scheduling(), str(LAUNCHER), "--deliver"],
+        "ProgramArguments": delivery_command(),
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
         "RunAtLoad": False,
         "EnvironmentVariables": {"PATH": _job_path(_helper_dirs()), "HOME": str(Path.home())},
