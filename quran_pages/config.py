@@ -47,6 +47,7 @@ class Config:
     next_page: int = 1  # 1..PAGE_COUNT, wraps around
     last_delivered_page: int = 0  # 0 = nothing sent yet
     last_delivery_date: str = ""  # ISO date of the most recent delivery
+    last_scheduled_run: str = ""  # ISO date the scheduled task last delivered
     deliver_to_desktop: bool = True
     open_after_delivery: bool = False  # open each page in the default image viewer
     send_via_wacli: bool = False

@@ -48,12 +48,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.deliver:
         from . import delivery
 
-        if delivery.already_delivered_today():
-            print("already delivered today — nothing to do")
-            return 0
-        pages = delivery.deliver_today()
+        # Let deliver_today() apply the guard: it logs why it skipped, and a
+        # scheduled run has no console for anything printed here to reach.
+        pages = delivery.deliver_today(scheduled=True)
         print(f"delivered pages: {pages}" if pages else "nothing delivered — see delivery.log")
-        return 0 if pages else 1
+        return 0
 
     if args.download_all:
         from . import downloader

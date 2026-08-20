@@ -120,22 +120,26 @@ def log(message: str) -> None:
         handle.write(f"[{stamp}] {message}\n")
 
 
-def already_delivered_today(config: Optional[Config] = None) -> bool:
+def scheduled_run_done_today(config: Optional[Config] = None) -> bool:
     config = config or Config.load()
-    return config.last_delivery_date == datetime.date.today().isoformat()
+    return config.last_scheduled_run == datetime.date.today().isoformat()
 
 
-def deliver_today(config: Optional[Config] = None, force: bool = False) -> List[int]:
+def deliver_today(config: Optional[Config] = None, scheduled: bool = False) -> List[int]:
     """Deliver the next batch of pages and advance progress; returns pages delivered.
 
     Pages are delivered sequentially and progress is saved after each one, so a
-    mid-batch failure (no network, wacli error) never skips a page. A scheduled
-    run that already delivered today is skipped unless force is set, so the task
-    firing twice (e.g. a missed-job catch-up) never sends duplicates.
+    mid-batch failure (no network, wacli error) never skips a page.
+
+    A scheduled run that already delivered today is skipped, so a task firing
+    twice — a catch-up after the machine wakes, say — cannot send duplicates.
+    That is deliberately tracked apart from manual deliveries: pressing
+    "Deliver now" to test must not make the day's real scheduled run refuse to
+    fire, which looks exactly like the schedule being broken.
     """
     config = config or Config.load()
-    if not force and already_delivered_today(config):
-        log(f"skipped: already delivered today (last page {config.last_delivered_page})")
+    if scheduled and scheduled_run_done_today(config):
+        log(f"skipped: scheduled run already delivered today (page {config.last_delivered_page})")
         return []
     delivered: List[int] = []
     for _ in range(max(1, config.pages_per_day)):
@@ -164,6 +168,8 @@ def deliver_today(config: Optional[Config] = None, force: bool = False) -> List[
         config.next_page = page % PAGE_COUNT + 1
         config.last_delivered_page = page
         config.last_delivery_date = datetime.date.today().isoformat()
+        if scheduled:
+            config.last_scheduled_run = config.last_delivery_date
         config.save()
         log(f"page {page}: delivered → {', '.join(destinations) or 'library only'}")
     return delivered

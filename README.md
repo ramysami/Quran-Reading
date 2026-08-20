@@ -112,6 +112,18 @@ run retries the same page.
 launchctl print gui/$(id -u)/com.quranpages.daily | grep -E "state|runs|last exit"
 ```
 
+**The scheduled run did nothing, and the log says nothing either.**
+Fixed. Two separate problems used to combine here: pressing **Deliver now** to
+test marked the day as delivered, so the real scheduled run refused to fire —
+and it refused *silently*, because the skip was decided before the code that
+writes the log.
+
+Manual and scheduled deliveries are now tracked apart. **Deliver now** always
+delivers the next page and never consumes the day's scheduled run; the guard
+only stops a *scheduled* task from firing twice in one day, which is what it
+was for (a catch-up after the machine wakes must not send duplicates). Every
+outcome — delivered, failed, or skipped — is written to `delivery.log`.
+
 **Windows: the task exists but never runs.**
 Two Task Scheduler defaults break a daily job, and neither reports an error —
 the run simply never happens:
