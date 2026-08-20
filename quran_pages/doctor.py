@@ -120,8 +120,14 @@ def report() -> str:
     ]
 
     try:
-        recent = log_file().read_text(encoding="utf-8").strip().splitlines()[-8:]
-        lines += ["Recent deliveries:"] + [f"    {line}" for line in recent]
+        # One entry per run, not one line: a failure can span many lines and
+        # would otherwise push the entries that matter out of view.
+        entries = [
+            line for line in log_file().read_text(encoding="utf-8").splitlines()
+            if line.startswith("[")
+        ][-8:]
+        trimmed = [line if len(line) <= 150 else line[:147] + "..." for line in entries]
+        lines += ["Recent deliveries:"] + [f"    {line}" for line in trimmed]
     except OSError:
         lines += ["Recent deliveries: (no log yet — nothing has run)"]
 

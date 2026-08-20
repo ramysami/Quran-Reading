@@ -338,7 +338,7 @@ class App(tk.Tk):
 
     def _deliver_worker(self) -> None:
         try:
-            pages = delivery.deliver_today(force=True)
+            pages = delivery.deliver_today()
             if pages:
                 self._events.put(("delivered", pages))
             else:
