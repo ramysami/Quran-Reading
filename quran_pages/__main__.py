@@ -94,7 +94,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         pages = delivery.deliver_today(scheduled=True)
         print(f"delivered pages: {pages}" if pages else "nothing delivered — see delivery.log")
         _settle()
-        return 0
+        # The exit code drives launchd's retry: non-zero means "try again
+        # later". Delivering nothing is only a failure if today's run has not
+        # happened yet — a run skipped because it already has is a success.
+        if pages or delivery.scheduled_run_done_today():
+            return 0
+        return 1
 
     if args.download_all:
         from . import downloader

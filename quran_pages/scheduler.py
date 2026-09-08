@@ -19,6 +19,7 @@ from typing import List, Sequence, Tuple
 from .config import Config, app_home, frozen
 
 TASK_NAME = "QuranPagesDaily"
+_RETRY_SECONDS = 1800  # half an hour between retries of a failed run
 LAUNCHD_LABEL = "com.quranpages.daily"
 LAUNCHER = Path(__file__).resolve().parent.parent / "run.py"
 
@@ -230,6 +231,18 @@ def _schedule_macos(hour: int, minute: int) -> None:
         "EnvironmentVariables": {"PATH": _job_path(_helper_dirs()), "HOME": str(Path.home())},
         "StandardOutPath": log_path,
         "StandardErrorPath": log_path,
+        # Relaunch only when the run reports failure, every half hour, until it
+        # works. A delivery that misses because the machine had no network at
+        # the scheduled minute is retried during the day instead of being lost
+        # until tomorrow. --deliver exits non-zero only for a real failure: a
+        # successful delivery, and a run correctly skipped because today is
+        # already done, both exit zero and stop the cycle.
+        "KeepAlive": {"SuccessfulExit": False},
+        "ThrottleInterval": _RETRY_SECONDS,
+        # A daily background errand should never compete with the user's work.
+        "ProcessType": "Background",
+        "LowPriorityIO": True,
+        "LowPriorityBackgroundIO": True,
     }
     app_home().mkdir(parents=True, exist_ok=True)
     path = _launchd_plist_path()

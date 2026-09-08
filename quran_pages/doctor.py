@@ -18,7 +18,10 @@ from .config import PAGE_COUNT, Config, app_home, config_file, frozen, log_file
 
 
 def _mask(number: str) -> str:
-    return f"…{number[-4:]}" if len(number) > 4 else number or "(not set)"
+    # Recipients may be a bare number or a full JID (2010…@s.whatsapp.net, with
+    # an optional :device suffix); mask the local part so the tail stays useful.
+    local = number.split("@", 1)[0].split(":", 1)[0]
+    return f"…{local[-4:]}" if len(local) > 4 else local or "(not set)"
 
 
 def _tkinter_status() -> str:

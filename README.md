@@ -84,6 +84,37 @@ python3 run.py --doctor         # print diagnostics (OS, Python, wacli, task, re
 reports the resolved wacli path, whether the task is registered, and the last
 few log lines in one block (the WhatsApp number is masked).
 
+## How the daily job behaves
+
+On macOS the launch agent is registered with a retry policy rather than a
+single daily shot:
+
+| Key | Value | Why |
+| --- | --- | --- |
+| `KeepAlive` | `{SuccessfulExit: false}` | relaunch only when a run reports failure |
+| `ThrottleInterval` | `1800` | wait half an hour between those retries |
+| `ProcessType` | `Background` | never compete with foreground work |
+| `LowPriorityIO`, `LowPriorityBackgroundIO` | `true` | same, for disk |
+
+So a delivery that fails because the machine had no network at the scheduled
+minute is retried through the day instead of being lost until tomorrow. This
+works because `--deliver` returns a meaningful exit code: non-zero only for a
+real failure, zero both for a successful delivery and for a run correctly
+skipped because today is already done — which is what stops the retry cycle.
+
+Two consequences worth knowing:
+
+- **Saving the schedule triggers a delivery attempt.** launchd starts a
+  `KeepAlive` job as soon as it is loaded, so pressing *Save & schedule daily
+  task* runs one immediately. The same-day guard caps that at one delivery per
+  day, so setting up at 20:00 with a 09:00 time still delivers today rather
+  than waiting until tomorrow.
+- **A permanently failing delivery retries every half hour.** Each attempt is
+  logged, so `--doctor` will show what is wrong.
+
+Windows keeps its own equivalents — catch-up for missed runs and no battery
+restriction — set through the task XML.
+
 ## Data locations
 
 | What            | macOS                                          | Windows                        |
