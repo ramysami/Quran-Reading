@@ -116,13 +116,13 @@ def open_image(path: Path) -> None:
         subprocess.run(["xdg-open", str(path)], check=True)
 
 
-def send_via_wacli(image: Path, number: str, caption: str, configured: str = "") -> None:
+def send_via_wacli(image: Path, number: str, configured: str = "") -> None:
     executable = wacli_path(configured)
     if executable is None:
         searched = ", ".join(str(d) for d in _wacli_search_dirs())
         raise RuntimeError(f"wacli executable not found (searched PATH and {searched})")
     result = subprocess.run(
-        [executable, "send", "file", "--to", number, "--file", str(image), "--caption", caption],
+        [executable, "send", "file", "--to", number, "--file", str(image)],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -176,8 +176,7 @@ def deliver_today(config: Optional[Config] = None, scheduled: bool = False) -> L
                 shutil.copy2(image, display_copy)
                 destinations.append("Desktop")
             if config.send_via_wacli and config.wacli_number:
-                caption = f"Quran — page {page} of {PAGE_COUNT}"
-                send_via_wacli(image, config.wacli_number, caption, config.wacli_path)
+                send_via_wacli(image, config.wacli_number, config.wacli_path)
                 destinations.append(f"WhatsApp {config.wacli_number}")
             if config.open_after_delivery:
                 open_image(display_copy)
